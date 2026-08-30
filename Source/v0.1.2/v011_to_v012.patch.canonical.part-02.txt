@@ -1,0 +1,93 @@
++        return bool(s.caching or (s.video_queue_data_pct is not None and s.video_queue_data_pct <= 8) or (s.video_queue_data_pct is None and s.video_queue_pct is not None and s.video_queue_pct <= 8) or (s.audio_queue_data_pct is not None and s.audio_queue_data_pct <= 5) or (s.audio_queue_data_pct is None and s.audio_queue_pct is not None and s.audio_queue_pct <= 5))
++    starvation_seen = any(starving_sample(s) for s in samples)
++    starvation = _sustained(samples, starving_sample, 0.5) or (user_reported and starvation_seen)
++    collapse_threshold = max(0.15, bitrate_med * 0.12) if bitrate_med and bitrate_med >= 1.0 else None
++    collapse_seen = bool(collapse_threshold is not None and any(s.video_bitrate_mbps is not None and s.video_bitrate_mbps <= collapse_threshold for s in samples))
++    bitrate_collapse = bool(collapse_threshold is not None and (_sustained(samples, lambda s: s.video_bitrate_mbps is not None and s.video_bitrate_mbps <= collapse_threshold, 0.5) or (user_reported and collapse_seen)))
+     cpu_known = cpu_peak is not None
+     mem_known = free_mem_min is not None
+     cpu_comfortable = cpu_known and cpu_peak < 80
+@@ -127,7 +156,7 @@
+             []
+         ))
+ 
+-    if starvation and internet_outage_overlap >= 2:
++    if starvation and internet_outage_overlap >= 2 and (internet_outage_sustained or user_reported):
+         findings.append(Finding(
+             "kodi_internet_unavailable", "network", "high", 88,
+             "Kodi reported no Internet connectivity during an Internet-stream starvation event",
+@@ -166,17 +195,27 @@
+             ["Verify hardware acceleration and driver/codec support before problems occur.", "Do not replace hardware based on this risk finding alone."], []
+         ))
+ 
+-    if free_mem_min is not None and free_mem_min <= 5:
+-        findings.append(Finding(
+-            "memory_pressure", "memory", "medium", 82,
+-            "Very low free memory was observed",
+-            "Available memory fell to a level where paging or allocation pressure can interfere with smooth playback.",
+-            [f"Minimum free memory {free_mem_min:.1f}%."],
++    memory_low = False
++    if free_mem_mb_min is not None and free_mem_mb_min <= 512:
++        memory_low = True
++    elif free_mem_min is not None and free_mem_min <= 5:
++        # On large-memory systems a small percentage can still represent several
++        # gigabytes of available RAM. If absolute MB is known, require <= 1 GiB.
++        memory_low = free_mem_mb_min is None or free_mem_mb_min <= 1024
++    if memory_low:
++        memory_problem_observed = playback_stall or user_reported
++        findings.append(Finding(
++            "memory_pressure", "memory", "medium" if memory_problem_observed else "low", 82 if memory_problem_observed else 70,
++            "Very low free memory coincided with a playback problem" if memory_problem_observed else "Very low free memory leaves little playback headroom",
++            ("Available memory was very low in the same window as an observed/reported playback problem, so paging or allocation pressure is a plausible contributor." if memory_problem_observed else "Available memory was very low, but no playback problem was established in this window. Treat this as a headroom risk rather than a proven cause."),
++            ([f"Minimum free memory {free_mem_min:.1f}%."] if free_mem_min is not None else []) + ([f"Minimum free memory {free_mem_mb_min:.0f} MB."] if free_mem_mb_min is not None else []) + (["A playback stall or user problem marker was present in the same window."] if memory_problem_observed else ["No playback stall or user problem marker was present in the same window."]),
+             ["Close memory-heavy background applications and retest.", "Check whether memory pressure persists across multiple streams.", "Only consider adding RAM if the pressure is repeatable while playback problems occur."], []
+         ))
+ 
+     # Audio-only starvation: audio queue collapses while the video queue remains healthy.
+-    if aq_min is not None and aq_min <= 5 and vq_min is not None and vq_min >= 50 and caching_pct < 2:
++    audio_starvation_seen = aq_min is not None and aq_min <= 5 and vq_min is not None and vq_min >= 50 and caching_pct < 2
++    audio_starvation_sustained = _sustained(samples, lambda s: ((s.audio_queue_data_pct if s.audio_queue_data_pct is not None else s.audio_queue_pct) is not None and (s.audio_queue_data_pct if s.audio_queue_data_pct is not None else s.audio_queue_pct) <= 5 and (s.video_queue_data_pct if s.video_queue_data_pct is not None else s.video_queue_pct) is not None and (s.video_queue_data_pct if s.video_queue_data_pct is not None else s.video_queue_pct) >= 50 and not s.caching), 0.5)
++    if audio_starvation_seen and (audio_starvation_sustained or user_reported):
+         findings.append(Finding(
+             "audio_queue_starvation", "audio", "high", 83,
+             "The audio path starved while video delivery remained healthy",
+@@ -186,7 +225,7 @@
+         ))
+ 
+     passthrough_values=[s.audio_passthrough for s in samples if s.audio_passthrough is not None]
+-    passthrough=bool(passthrough_values and sum(1 for x in passthrough_values if x) >= len(passthrough_values)/2)
++    passthrough=bool(passthrough_values and sum(1 for x in passthrough_values if x) > len(passthrough_values)/2)
+     if user_reported and user_issue in ("audio","avsync") and passthrough and (aq_min is None or aq_min >= 40) and not starvation:
+         findings.append(Finding(
+             "audio_passthrough_risk", "audio", "medium", 66,
+diff -ruN '--exclude=dist' /mnt/data/kodi-stream-doctor/v011-extract/kodi-stream-doctor/service.streamdoctor/resources/lib/streamdoctor/history.py /mnt/data/kodi-stream-doctor/v012-extract/kodi-stream-doctor/service.streamdoctor/resources/lib/streamdoctor/history.py
+--- /mnt/data/kodi-stream-doctor/v011-extract/kodi-stream-doctor/service.streamdoctor/resources/lib/streamdoctor/history.py	2026-01-01 00:00:00.000000000 +0000
++++ /mnt/data/kodi-stream-doctor/v012-extract/kodi-stream-doctor/service.streamdoctor/resources/lib/streamdoctor/history.py	2026-01-01 00:00:00.000000000 +0000
+@@ -7,7 +7,11 @@
+     provider=(src.get("pvr_provider") if isinstance(src,dict) else "") or ""
+     origin=(src.get("source_origin") if isinstance(src,dict) else "") or ""
+     if provider: return "provider",provider
+-    if origin and origin != "local-or-kodi-managed": return "origin",origin
++    # pvr:// origins are usually generic routing namespaces (for example
++    # pvr://channels), not a specific upstream source. Without provider metadata,
++    # do not make a historical source-attribution claim from that coarse label.
++    if origin and origin != "local-or-kodi-managed" and not origin.lower().startswith("pvr://"):
++        return "origin",origin
+     return None,None
+ 
+ def _codes(report):
+diff -ruN '--exclude=dist' /mnt/data/kodi-stream-doctor/v011-extract/kodi-stream-doctor/service.streamdoctor/resources/lib/streamdoctor/kodi_sensor.py /mnt/data/kodi-stream-doctor/v012-extract/kodi-stream-doctor/service.streamdoctor/resources/lib/streamdoctor/kodi_sensor.py
+--- /mnt/data/kodi-stream-doctor/v011-extract/kodi-stream-doctor/service.streamdoctor/resources/lib/streamdoctor/kodi_sensor.py	2026-01-01 00:00:00.000000000 +0000
++++ /mnt/data/kodi-stream-doctor/v012-extract/kodi-stream-doctor/service.streamdoctor/resources/lib/streamdoctor/kodi_sensor.py	2026-01-01 00:00:00.000000000 +0000
+@@ -52,6 +52,9 @@
+     def cond(self, expr):
+         try: return bool(self.xbmc.getCondVisibility(expr))
+         except Exception: return False
++    def cond_optional(self, expr):
++        try: return bool(self.xbmc.getCondVisibility(expr))
++        except Exception: return None
+     def get_time(self):
+         try: return float(self.player.getTime())
+         except Exception: return None
+@@ -71,19 +74,24 @@
+         if connected and folded == connected.casefold(): return True

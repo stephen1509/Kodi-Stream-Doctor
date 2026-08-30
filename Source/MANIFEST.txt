@@ -1,0 +1,56 @@
+Kodi Stream Doctor v0.1.1 — Canonical Source Preservation Manifest
+Date: 2026-08-17 JST
+
+Canonical reconstructed archive:
+kodi-stream-doctor-v0.1.1-preservation.tar.xz
+
+Archive SHA-256:
+87987b74d81cda97e99d1d267a16b122a271ec5d6f7bdf2a8a0f9b601657408f
+
+Archive size before Base64: 44,564 bytes
+Base64 total length: 59,420 characters
+Git branch: main
+Canonical Git commit: c59f64480e5748803b1d7ad0cec9d76eafe8e1d3
+Commit message: Initialize Kodi Stream Doctor v0.1.1
+
+The archive was created deterministically from the files tracked by Git at this checkpoint and contains the committed source code, Kodi add-on package tree, tests, tools, research, design, QA and project documentation.
+
+PART ORDER / EXPECTED SIZE / EXPECTED SHA-256
+01  6000  8bab5fbf74b8cda0789cffade461c7ab0610a4522eb4e5493f7185d4277fcdac
+02  6000  0fd9bdd2fc173a7848b4e3f7962ef2efa97b73d52ebbe64b517a5cd0b54e001b
+03  6000  fdbfc2d861903bd10b49b51a855be6644499084e87d87e35b0c3f5029d7b3673
+04  6000  1094c55fd3380a6b1ee60194d3f4c315a9cca15d4ecba4122d98f3786c3ff442
+05  6000  db33c62821184d0c6d2f54933d0348e984fa9365687b281ce9914d27f1f02df3
+06  6000  00795e83fdd1e31ea3ef105eb8b86180c99d185b9e335cf3898b94989e29aa9f
+07  6000  229fa6d094c24ab344d202d908ebe40316c0b9abe7fb51b886cac459b746bb4a
+08  6000  9b4818ab4dfbfca7926a1108534b597599bc72b0ecf198326015e5b1acf6d547
+09  6000  f0c1999311a8fdb46dfe726956cbb0003e1b390f927436fd39d312c73037372a
+10  5420  d74c905b5c7d7ea780ab9f1f1261851e98abed8bd91e56cb4a81667cec0fa154
+
+Dropbox listing was checked after upload: parts 01–09 were each reported as 6,000 bytes and part 10 as 5,420 bytes.
+
+RECONSTRUCT ON WINDOWS POWERSHELL
+
+Run in a directory containing all ten part files:
+
+$b64 = ''
+Get-ChildItem 'kodi-stream-doctor-v0.1.1-preservation.tar.xz.b64.part-*.txt' | Sort-Object Name | ForEach-Object { $b64 += Get-Content $_.FullName -Raw }
+[IO.File]::WriteAllBytes('kodi-stream-doctor-v0.1.1-preservation.tar.xz',[Convert]::FromBase64String($b64))
+
+VERIFY
+
+Get-FileHash .\kodi-stream-doctor-v0.1.1-preservation.tar.xz -Algorithm SHA256
+
+The result MUST be:
+87987b74d81cda97e99d1d267a16b122a271ec5d6f7bdf2a8a0f9b601657408f
+
+EXTRACT
+
+tar -xJf .\kodi-stream-doctor-v0.1.1-preservation.tar.xz
+
+After extraction, the project can be initialized/recovered as needed. The original local Git checkpoint is documented separately under ../Git/GIT_CHECKPOINT.txt.
+
+RELEASE REPRODUCTION
+
+The installable Kodi ZIP is reproducible from the preserved source using tools/build_zip.py / tools/qa.py. The v0.1.1 tested install ZIP expected SHA-256 is:
+adf02dcc6a827c98bea574e3a7807b89c2282963fe740f3416e00dceb303ddf4

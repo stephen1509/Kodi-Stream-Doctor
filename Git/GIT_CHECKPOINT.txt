@@ -1,0 +1,26 @@
+Kodi Stream Doctor — Git Checkpoint
+Date: 2026-08-17 JST
+
+Local repository branch:
+main
+
+Canonical local commit:
+c59f64480e5748803b1d7ad0cec9d76eafe8e1d3
+
+Commit message:
+Initialize Kodi Stream Doctor v0.1.1
+
+Intended dedicated private GitHub repository:
+stephen1509/kodi-stream-doctor
+
+Local Git bundle created during preservation:
+kodi-stream-doctor-v0.1.1.git.bundle
+SHA-256: 14977c6abd0439f61b11ded9c767bde104b9bd38647f50795697bf6eb967e768
+
+GitHub publication status:
+NOT YET PUBLISHED. The connected GitHub integration available in this session can write to repositories that already exist, but it does not expose repository creation. The working environment also has no authenticated GitHub CLI/token. The project was deliberately NOT placed into an unrelated existing repository.
+
+Recovery:
+The complete committed source/docs/tests/tools checkpoint is independently preserved under ../Source as the 10-part Base64 representation of kodi-stream-doctor-v0.1.1-preservation.tar.xz. Its manifest includes reconstruction and SHA-256 verification instructions.
+
+When the dedicated repository exists, initialize/push the preserved project to stephen1509/kodi-stream-doctor and verify the resulting main tree against this checkpoint before treating GitHub as authoritative.

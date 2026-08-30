@@ -1,0 +1,88 @@
+         if disconnected and folded == disconnected.casefold(): return False
+         return None
+-    def sample(self, monotonic_time):
++    def sample(self, monotonic_time, playing=None):
+         vb=self.label("video_bitrate"); ab=self.label("audio_bitrate"); raw_path=self.label("player_path"); internet_state=self.label("internet_state")
++        video_decoder=self.label("video_decoder"); audio_decoder=self.label("audio_decoder")
++        pvr_provider=safe_text_label(self.label("pvr_provider")); channel_name=safe_text_label(self.label("channel_name")); stream_title=safe_text_label(self.label("stream_title"))
++        playing_state=self.is_playing_video() if playing is None else bool(playing)
++        hw_decoder=self.cond_optional("Player.Process(videohwdecoder)")
++        audio_passthrough=self.cond_optional("Player.Passthrough")
+         # Official labels are localized strings (Mb/s and Kb/s). The numeric part is stable.
+         return TelemetrySample(
+-            t=monotonic_time, wall_time=datetime.now(timezone.utc).isoformat(), playing=self.is_playing_video(), paused=self.cond("Player.Paused"),
++            t=monotonic_time, wall_time=datetime.now(timezone.utc).isoformat(), playing=playing_state, paused=self.cond("Player.Paused"),
+             is_live=self.cond("Player.IsLive"), is_internet_stream=self.cond("Player.IsInternetStream"), is_livetv_content=self.cond("VideoPlayer.Content(LiveTV)"), caching=self.cond("Player.Caching"), playback_time_s=self.get_time(),
+-            video_bitrate_mbps=parse_bitrate_mbps(vb), audio_bitrate_kbps=parse_bitrate_kbps(ab), audio_decoder=self.label("audio_decoder"), audio_channels=self.label("audio_channels"), audio_sample_rate_hz=as_int(self.label("audio_samplerate")), audio_passthrough=self.cond("Player.Passthrough"),
++            video_bitrate_mbps=parse_bitrate_mbps(vb), audio_bitrate_kbps=parse_bitrate_kbps(ab), audio_decoder=audio_decoder, audio_channels=self.label("audio_channels"), audio_sample_rate_hz=as_int(self.label("audio_samplerate")), audio_passthrough=audio_passthrough,
+             video_queue_pct=parse_percent(self.label("video_queue")), video_queue_data_pct=parse_percent(self.label("video_queue_data")),
+             audio_queue_pct=parse_percent(self.label("audio_queue")), audio_queue_data_pct=parse_percent(self.label("audio_queue_data")),
+-            video_decoder=self.label("video_decoder"), hw_decoder=self.cond("Player.Process(videohwdecoder)"), video_codec=self.label("video_codec"),
++            video_decoder=video_decoder, hw_decoder=hw_decoder, video_codec=self.label("video_codec"),
+             video_fps=first_number(self.label("video_fps")), video_width=as_int(self.label("video_width")), video_height=as_int(self.label("video_height")),
+             scan_type=self.label("scan_type"), deint_method=self.label("deint_method"), pixel_format=self.label("pix_format"),
+             cpu_usage_pct=parse_cpu_usage(self.label("cpu_usage")), cpu_frequency_mhz=parse_frequency_mhz(self.label("cpu_freq")), free_memory_pct=parse_percent(self.label("free_memory")), free_memory_mb=first_number(self.label("free_memory_mb")),
+             cpu_temp_c=parse_temperature_c(self.label("cpu_temp"), self.label("temperature_units")), gpu_temp_c=parse_temperature_c(self.label("gpu_temp"), self.label("temperature_units")), gui_fps=first_number(self.label("gui_fps")),
+             network_link_state=self.label("network_link"), link_mbps=parse_link_mbps(self.label("network_link")), internet_state=safe_text_label(internet_state), internet_connected=self.internet_connected(internet_state),
+-            screen_resolution=self.label("screen"), refresh_hz=parse_refresh_hz(self.label("screen")), pvr_provider=safe_text_label(self.label("pvr_provider")), source_origin=safe_source_label(raw_path), source_key=source_identity_key(raw_path), channel_name=safe_text_label(self.label("channel_name")), stream_title=safe_text_label(self.label("stream_title")), pvr_status=safe_text_label(self.label("pvr_status")), pvr_signal=first_number(self.label("pvr_signal")), pvr_snr=first_number(self.label("pvr_snr")), pvr_ber=first_number(self.label("pvr_ber")), pvr_unc=first_number(self.label("pvr_unc")))
++            screen_resolution=self.label("screen"), refresh_hz=parse_refresh_hz(self.label("screen")), pvr_provider=pvr_provider, source_origin=safe_source_label(raw_path), source_key=source_identity_key(raw_path, channel_name, pvr_provider), channel_name=channel_name, stream_title=stream_title, pvr_status=safe_text_label(self.label("pvr_status")), pvr_signal=first_number(self.label("pvr_signal")), pvr_snr=first_number(self.label("pvr_snr")), pvr_ber=first_number(self.label("pvr_ber")), pvr_unc=first_number(self.label("pvr_unc")))
+diff -ruN '--exclude=dist' /mnt/data/kodi-stream-doctor/v011-extract/kodi-stream-doctor/service.streamdoctor/resources/lib/streamdoctor/redaction.py /mnt/data/kodi-stream-doctor/v012-extract/kodi-stream-doctor/service.streamdoctor/resources/lib/streamdoctor/redaction.py
+--- /mnt/data/kodi-stream-doctor/v011-extract/kodi-stream-doctor/service.streamdoctor/resources/lib/streamdoctor/redaction.py	2026-01-01 00:00:00.000000000 +0000
++++ /mnt/data/kodi-stream-doctor/v012-extract/kodi-stream-doctor/service.streamdoctor/resources/lib/streamdoctor/redaction.py	2026-01-01 00:00:00.000000000 +0000
+@@ -31,7 +31,7 @@
+ 
+ 
+ 
+-def source_identity_key(path: str) -> str:
++def source_identity_key(path: str, *fallback_parts: str) -> str:
+     """Return a stable, non-reversible key for stream-session boundaries.
+ 
+     Query strings, fragments and URL credentials are removed before hashing so
+@@ -40,21 +40,35 @@
+     pvr://) the same rule applies.
+     """
+     raw = str(path or "").strip()
+-    if not raw:
++    normalized = ""
++    if raw:
++        try:
++            p = urlsplit(raw)
++            if p.scheme:
++                host = (p.hostname or "").lower()
++                # p.port may raise ValueError for malformed input. Invalid ports are
++                # ignored rather than falling back to hashing raw credential-bearing text.
++                try:
++                    port_value = p.port
++                except ValueError:
++                    port_value = None
++                if ":" in host and not host.startswith("["):
++                    host = f"[{host}]"
++                port = f":{port_value}" if port_value else ""
++                # Preserve scheme, host and path only. Never retain userinfo/query/fragment.
++                normalized = urlunsplit((p.scheme.lower(), host + port, p.path or "", "", ""))
++            else:
++                # Kodi-managed/local paths can still contain query/fragment-like suffixes.
++                normalized = raw.split("#",1)[0].split("?",1)[0]
++        except Exception:
++            # Last-resort normalization intentionally discards common credential and
++            # URL suffix material before hashing. The value is never persisted.
++            normalized = redact_text(raw).split("#",1)[0].split("?",1)[0]
++    fallback = "|".join(safe_text_label(x, 160) for x in fallback_parts if str(x or "").strip())
++    identity_material = normalized + ("|" + fallback if fallback else "")
++    if not identity_material:
+         return ""
+-    try:
+-        p = urlsplit(raw)
+-        if p.scheme:
+-            host = (p.hostname or "").lower()
+-            port = f":{p.port}" if p.port else ""
+-            # Preserve scheme, host and path only. Never retain userinfo/query/fragment.
+-            normalized = urlunsplit((p.scheme.lower(), host + port, p.path or "", "", ""))
+-        else:
+-            # Kodi-managed/local paths can still contain query/fragment-like suffixes.
+-            normalized = raw.split("#",1)[0].split("?",1)[0]
+-    except Exception:
+-        normalized = raw.split("#",1)[0].split("?",1)[0]
+-    return hashlib.sha256(normalized.encode("utf-8", "replace")).hexdigest()[:20]
++    return hashlib.sha256(identity_material.encode("utf-8", "replace")).hexdigest()[:20]
+ 

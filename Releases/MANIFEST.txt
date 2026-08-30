@@ -1,0 +1,48 @@
+Kodi Stream Doctor v0.1.1 — Exact Tested Install ZIP Preservation
+Date: 2026-08-17 JST
+
+Canonical binary:
+service.streamdoctor-0.1.1.zip
+Binary size: 30,069 bytes
+Binary SHA-256:
+adf02dcc6a827c98bea574e3a7807b89c2282963fe740f3416e00dceb303ddf4
+
+Because the connected Dropbox interface in this session accepts UTF-8 text rather than arbitrary binary uploads, the exact tested ZIP is preserved as Base64 text split into seven canonical files.
+
+Base64 total length: 40,092 characters
+
+CANONICAL PART ORDER / EXPECTED SIZE / EXPECTED SHA-256
+01  6000  728e5b15a36d75513addd065c79a5abe89b139097db6d228442ca85c83178746
+02  6000  d36830019c1e0ee99750c69a609fa2e0e7eea4c56e11d7f52819f891f2ca325e
+03  6000  aa023d92b1e677c0187b8ab1d9f4fc5154cfe377d6cb94edc42fcef205290a8f
+04  6000  2fc8a6488c31ee89f629d0be7d3051cd5a2b0af1ec14e185897193fca04bb6e6
+05  6000  f974efc00b8eb82a34c4587054f5c2001d95f190e71e089d04c3cbfa6f4acb1a
+06  6000  99316061cd7d0e47e056439e3f8c84af915da9ed66c8bb0ebe29b8a4a13b064f
+07  4092  846ef8c812ca4c6ca0cb8d52f91b643aab08faeedc7a165c7185f732dfdcb491
+
+Canonical filenames:
+service.streamdoctor-0.1.1.zip.b64.canonical.part-01.txt
+service.streamdoctor-0.1.1.zip.b64.canonical.part-02.txt
+service.streamdoctor-0.1.1.zip.b64.canonical.part-03.txt
+service.streamdoctor-0.1.1.zip.b64.canonical.part-04.txt
+service.streamdoctor-0.1.1.zip.b64.canonical.part-05.txt
+service.streamdoctor-0.1.1.zip.b64.canonical.part-06.txt
+service.streamdoctor-0.1.1.zip.b64.canonical.part-07.txt
+
+RECONSTRUCT ON WINDOWS POWERSHELL
+
+$b64 = ''
+Get-ChildItem 'service.streamdoctor-0.1.1.zip.b64.canonical.part-*.txt' | Sort-Object Name | ForEach-Object { $b64 += Get-Content $_.FullName -Raw }
+[IO.File]::WriteAllBytes('service.streamdoctor-0.1.1.zip',[Convert]::FromBase64String($b64))
+Get-FileHash .\service.streamdoctor-0.1.1.zip -Algorithm SHA256
+
+The reconstructed ZIP MUST have SHA-256:
+adf02dcc6a827c98bea574e3a7807b89c2282963fe740f3416e00dceb303ddf4
+
+NON-CANONICAL / ABANDONED FILES
+
+The following files are NOT part of the canonical release backup and must not be used for reconstruction:
+- service.streamdoctor-0.1.1.zip.b64.part-01.txt — first attempt; Dropbox reported 15,999 bytes where 16,000 were expected.
+- service.streamdoctor-0.1.1.zip.b64.canonical.part-02-remainder.txt — attempted large remainder; connector truncated it to 10,000 bytes instead of 34,092.
+
+They were deliberately left in place for audit history rather than silently deleted. The seven canonical files listed above supersede both failed attempts.

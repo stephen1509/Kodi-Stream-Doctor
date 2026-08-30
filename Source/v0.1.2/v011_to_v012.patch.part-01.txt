@@ -1,0 +1,130 @@
+e real Kodi/Windows remain lower and are explicitly covered by physical gates.
+ 
+ Coverage includes:
+ - canonical diagnoses;
+diff -ruN '--exclude=dist' /mnt/data/kodi-stream-doctor/v011-extract/kodi-stream-doctor/docs/TESTING.md /mnt/data/kodi-stream-doctor/v012-extract/kodi-stream-doctor/docs/TESTING.md
+--- /mnt/data/kodi-stream-doctor/v011-extract/kodi-stream-doctor/docs/TESTING.md	2026-01-01 00:00:00.000000000 +0000
++++ /mnt/data/kodi-stream-doctor/v012-extract/kodi-stream-doctor/docs/TESTING.md	2026-01-01 00:00:00.000000000 +0000
+@@ -2,7 +2,7 @@
+ 
+ ## Current offline status
+ 
+-The current engineering prototype passes **94 deterministic unit/adversarial/integration tests**, including an 800-case fixed-seed randomized telemetry suite. This is not a substitute for physical Kodi testing.
++The current engineering prototype passes **111 deterministic unit/adversarial/integration tests**, including an 800-case fixed-seed randomized telemetry suite. This is not a substitute for physical Kodi testing.
+ 
+ ## Offline gates
+ 
+diff -ruN '--exclude=dist' /mnt/data/kodi-stream-doctor/v011-extract/kodi-stream-doctor/service.streamdoctor/addon.xml /mnt/data/kodi-stream-doctor/v012-extract/kodi-stream-doctor/service.streamdoctor/addon.xml
+--- /mnt/data/kodi-stream-doctor/v011-extract/kodi-stream-doctor/service.streamdoctor/addon.xml	2026-01-01 00:00:00.000000000 +0000
++++ /mnt/data/kodi-stream-doctor/v012-extract/kodi-stream-doctor/service.streamdoctor/addon.xml	2026-01-01 00:00:00.000000000 +0000
+@@ -1,5 +1,5 @@
+ <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+-<addon id="service.streamdoctor" name="Stream Doctor" version="0.1.1" provider-name="Stephen Smith">
++<addon id="service.streamdoctor" name="Stream Doctor" version="0.1.2" provider-name="Stephen Smith">
+   <requires>
+     <import addon="xbmc.python" version="3.0.0"/>
+   </requires>
+diff -ruN '--exclude=dist' /mnt/data/kodi-stream-doctor/v011-extract/kodi-stream-doctor/service.streamdoctor/resources/language/resource.language.en_gb/strings.po /mnt/data/kodi-stream-doctor/v012-extract/kodi-stream-doctor/service.streamdoctor/resources/language/resource.language.en_gb/strings.po
+--- /mnt/data/kodi-stream-doctor/v011-extract/kodi-stream-doctor/service.streamdoctor/resources/language/resource.language.en_gb/strings.po	2026-01-01 00:00:00.000000000 +0000
++++ /mnt/data/kodi-stream-doctor/v012-extract/kodi-stream-doctor/service.streamdoctor/resources/language/resource.language.en_gb/strings.po	2026-01-01 00:00:00.000000000 +0000
+@@ -1,7 +1,7 @@
+ # Kodi Stream Doctor localization
+ msgid ""
+ msgstr ""
+-"Project-Id-Version: Stream Doctor 0.1.1\n"
++"Project-Id-Version: Stream Doctor 0.1.2\n"
+ "Language: en_GB\n"
+ "MIME-Version: 1.0\n"
+ "Content-Type: text/plain; charset=UTF-8\n"
+diff -ruN '--exclude=dist' /mnt/data/kodi-stream-doctor/v011-extract/kodi-stream-doctor/service.streamdoctor/resources/lib/streamdoctor/__init__.py /mnt/data/kodi-stream-doctor/v012-extract/kodi-stream-doctor/service.streamdoctor/resources/lib/streamdoctor/__init__.py
+--- /mnt/data/kodi-stream-doctor/v011-extract/kodi-stream-doctor/service.streamdoctor/resources/lib/streamdoctor/__init__.py	2026-01-01 00:00:00.000000000 +0000
++++ /mnt/data/kodi-stream-doctor/v012-extract/kodi-stream-doctor/service.streamdoctor/resources/lib/streamdoctor/__init__.py	2026-01-01 00:00:00.000000000 +0000
+@@ -1 +1 @@
+-__version__ = "0.1.0"
++__version__ = "0.1.2"
+diff -ruN '--exclude=dist' /mnt/data/kodi-stream-doctor/v011-extract/kodi-stream-doctor/service.streamdoctor/resources/lib/streamdoctor/diagnose.py /mnt/data/kodi-stream-doctor/v012-extract/kodi-stream-doctor/service.streamdoctor/resources/lib/streamdoctor/diagnose.py
+--- /mnt/data/kodi-stream-doctor/v011-extract/kodi-stream-doctor/service.streamdoctor/resources/lib/streamdoctor/diagnose.py	2026-01-01 00:00:00.000000000 +0000
++++ /mnt/data/kodi-stream-doctor/v012-extract/kodi-stream-doctor/service.streamdoctor/resources/lib/streamdoctor/diagnose.py	2026-01-01 00:00:00.000000000 +0000
+@@ -22,6 +22,26 @@
+ def _fmt(v, suffix=""):
+     return "unknown" if v is None else f"{v:.1f}{suffix}"
+ 
++def _sustained(samples, pred, threshold_s=0.5):
++    start_t = None
++    run_count = 0
++    for s in samples:
++        if pred(s):
++            if start_t is None:
++                start_t = s.t
++                run_count = 1
++            else:
++                run_count += 1
++            # Three consecutive samples protects high-rate telemetry from a
++            # one-sample blip; two samples also suffice when they span the
++            # requested wall-clock duration.
++            if run_count >= 3 or (run_count >= 2 and s.t - start_t >= threshold_s):
++                return True
++        else:
++            start_t = None
++            run_count = 0
++    return False
++
+ def _has_playback_stall(samples, threshold_s=1.5):
+     start_t = None
+     last_time = None
+@@ -53,6 +73,7 @@
+     cpu_peak = _max(samples, "cpu_usage_pct")
+     cpu_avg = _avg(samples, "cpu_usage_pct")
+     free_mem_min = _min(samples, "free_memory_pct")
++    free_mem_mb_min = _min(samples, "free_memory_mb")
+     vq_min = _min(samples, "video_queue_data_pct")
+     if vq_min is None: vq_min = _min(samples, "video_queue_pct")
+     aq_min = _min(samples, "audio_queue_data_pct")
+@@ -71,7 +92,10 @@
+     deint_values=[(s.deint_method or "").strip() for s in samples if (s.deint_method or "").strip()]
+     deint=deint_values[-1] if deint_values else ""
+     internet_values=[s.internet_connected for s in samples if s.internet_connected is not None]
+-    internet_outage_overlap=sum(1 for s in samples if s.is_internet_stream and s.internet_connected is False and (s.caching or (s.video_queue_data_pct is not None and s.video_queue_data_pct <= 8) or (s.video_queue_pct is not None and s.video_queue_pct <= 8)))
++    def internet_outage_sample(s):
++        return bool(s.is_internet_stream and s.internet_connected is False and (s.caching or (s.video_queue_data_pct is not None and s.video_queue_data_pct <= 8) or (s.video_queue_pct is not None and s.video_queue_pct <= 8)))
++    internet_outage_overlap=sum(1 for s in samples if internet_outage_sample(s))
++    internet_outage_sustained=_sustained(samples, internet_outage_sample, 0.5)
+     sample_links = _vals(samples, "link_mbps")
+     if sample_links:
+         # Kodi's own link label is preferred because it represents the link Kodi sees.
+@@ -85,8 +109,13 @@
+     stream_mbps = (bitrate_med or 0) + ((median(_vals(samples, "audio_bitrate_kbps")) or 0) / 1000.0)
+     playback_stall = _has_playback_stall(samples)
+ 
+-    starvation = (caching_pct >= 3.0) or (vq_min is not None and vq_min <= 8) or (aq_min is not None and aq_min <= 5)
+-    bitrate_collapse = bool(bitrate_med and bitrate_min is not None and bitrate_med >= 1.0 and bitrate_min <= max(0.15, bitrate_med * 0.12))
++    def starving_sample(s):
++        return bool(s.caching or (s.video_queue_data_pct is not None and s.video_queue_data_pct <= 8) or (s.video_queue_data_pct is None and s.video_queue_pct is not None and s.video_queue_pct <= 8) or (s.audio_queue_data_pct is not None and s.audio_queue_data_pct <= 5) or (s.audio_queue_data_pct is None and s.audio_queue_pct is not None and s.audio_queue_pct <= 5))
++    starvation_seen = any(starving_sample(s) for s in samples)
++    starvation = _sustained(samples, starving_sample, 0.5) or (user_reported and starvation_seen)
++    collapse_threshold = max(0.15, bitrate_med * 0.12) if bitrate_med and bitrate_med >= 1.0 else None
++    collapse_seen = bool(collapse_threshold is not None and any(s.video_bitrate_mbps is not None and s.video_bitrate_mbps <= collapse_threshold for s in samples))
++    bitrate_collapse = bool(collapse_threshold is not None and (_sustained(samples, lambda s: s.video_bitrate_mbps is not None and s.video_bitrate_mbps <= collapse_threshold, 0.5) or (user_reported and collapse_seen)))
+     cpu_known = cpu_peak is not None
+     mem_known = free_mem_min is not None
+     cpu_comfortable = cpu_known and cpu_peak < 80
+@@ -127,7 +156,7 @@
+             []
+         ))
+ 
+-    if starvation and internet_outage_overlap >= 2:
++    if starvation and internet_outage_overlap >= 2 and (internet_outage_sustained or user_reported):
+         findings.append(Finding(
+             "kodi_internet_unavailable", "network", "high", 88,
+             "Kodi reported no Internet connectivity during an Internet-stream starvation event",
+@@ -166,17 +195,27 @@
+             ["Verify hardware acceleration and driver/codec support before problems occur.", "Do not replace hardware based on this risk finding alone."], []
+         ))
+ 
+-    if free_mem_min is not None and free_mem_min <= 5:
+-        findings.append(Finding(
+-            "memory_pressure", "memory", "medium", 82,
+-            "Very low free memory was observed",
+-            "Available memory fell to a level where paging or allocation pressure can interfere with smooth playback.",
+-            [f"Minimum free memory {free_mem_min:.1f}%."],
++    memory_low = 

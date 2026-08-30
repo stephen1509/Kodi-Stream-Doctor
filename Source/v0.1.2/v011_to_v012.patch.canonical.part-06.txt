@@ -1,0 +1,54 @@
++    def test_nonconsecutive_internet_blips_do_not_become_high_outage_diagnosis(self):
++        xs=[sample(i*0.5,is_internet_stream=True) for i in range(20)]
++        for i in (5,15):
++            xs[i]=sample(i*0.5,is_internet_stream=True,internet_connected=False,video_queue_data_pct=1,caching=True)
++        self.assertNotIn('kodi_internet_unavailable',[f.code for f in diagnose(xs,SystemContext())])
++
++    def test_report_boolean_tie_is_unknown(self):
++        from streamdoctor.session import SessionAnalyzer
++        a=SessionAnalyzer(SystemContext())
++        a.add(sample(0,hw_decoder=True,internet_connected=True))
++        a.add(sample(.5,hw_decoder=False,internet_connected=False))
++        src=a._source()
++        self.assertIsNone(src['hardware_decoder_active'])
++        self.assertIsNone(src['internet_connected'])
++
++class StorageDefenseInDepthTests(unittest.TestCase):
++    def test_report_writer_redacts_future_accidental_secret_fields(self):
++        from streamdoctor.storage import write_report
++        with tempfile.TemporaryDirectory() as d:
++            p=write_report(d,{
++                'summary':'token=super-secret https://user:pw@example.invalid/path?sig=abc',
++                'source':{'source_origin':'https://user:pw@example.invalid/path?token=abc','source_key':'ephemeral-hash'},
++                'authorization':'Bearer very-secret-value',
++            },20)
++            text=Path(p).read_text(encoding='utf-8')
++            self.assertNotIn('super-secret',text)
++            self.assertNotIn('user:pw',text)
++            self.assertNotIn('very-secret-value',text)
++            self.assertNotIn('ephemeral-hash',text)
++            payload=json.loads(text)
++            self.assertEqual(payload['source']['source_origin'],'https://example.invalid')
++            self.assertEqual(payload['authorization'],'[REDACTED]')
+diff -ruN '--exclude=dist' /mnt/data/kodi-stream-doctor/v011-extract/kodi-stream-doctor/tools/qa.py /mnt/data/kodi-stream-doctor/v012-extract/kodi-stream-doctor/tools/qa.py
+--- /mnt/data/kodi-stream-doctor/v011-extract/kodi-stream-doctor/tools/qa.py	2026-01-01 00:00:00.000000000 +0000
++++ /mnt/data/kodi-stream-doctor/v012-extract/kodi-stream-doctor/tools/qa.py	2026-01-01 00:00:00.000000000 +0000
+@@ -48,6 +48,9 @@
+     if re.search(forbidden_network,prod,re.I): fail('outbound HTTP/OpenAI client found in v0.1')
+ 
+     version=ET.parse(ADDON/'addon.xml').getroot().attrib['version']
++    init_text=(ADDON/'resources/lib/streamdoctor/__init__.py').read_text(encoding='utf-8')
++    m=re.search(r'__version__\s*=\s*["\']([^"\']+)',init_text)
++    if not m or m.group(1) != version: fail('internal library version does not match addon.xml')
+ 
+     print('5/7 build')
+     subprocess.run([sys.executable,str(ROOT/'tools/build_zip.py')],check=True,cwd=ROOT)
+@@ -57,6 +60,8 @@
+     source_zip=DIST/f'kodi-stream-doctor-source-{version}.zip'
+     for zpath in (addon_zip,source_zip):
+         with ZipFile(zpath) as z:
++            bad_member=z.testzip()
++            if bad_member: fail(f'ZIP CRC failure in {zpath.name}: {bad_member}')
+             names=z.namelist()
+             if any('__pycache__' in n or n.endswith('.pyc') for n in names): fail(f'cache bytecode in {zpath.name}')
+             if zpath==addon_zip:

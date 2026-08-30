@@ -1,0 +1,146 @@
+ def contains_secretish(text: str) -> bool:
+     return bool(_SECRET_KEYS.search(str(text or "")) or _BEARER.search(str(text or "")))
+diff -ruN '--exclude=dist' /mnt/data/kodi-stream-doctor/v011-extract/kodi-stream-doctor/service.streamdoctor/resources/lib/streamdoctor/service_runtime.py /mnt/data/kodi-stream-doctor/v012-extract/kodi-stream-doctor/service.streamdoctor/resources/lib/streamdoctor/service_runtime.py
+--- /mnt/data/kodi-stream-doctor/v011-extract/kodi-stream-doctor/service.streamdoctor/resources/lib/streamdoctor/service_runtime.py	2026-01-01 00:00:00.000000000 +0000
++++ /mnt/data/kodi-stream-doctor/v012-extract/kodi-stream-doctor/service.streamdoctor/resources/lib/streamdoctor/service_runtime.py	2026-01-01 00:00:00.000000000 +0000
+@@ -1,4 +1,4 @@
+-import platform, time
++import platform, re, time
+ 
+ 
+ def marker_is_fresh(value, now=None, max_age=20.0):
+@@ -10,6 +10,10 @@
+     age=now-stamp
+     return -2.0 <= age <= float(max_age)
+ 
++def kodi_major_version(value):
++    m=re.search(r"\d+", str(value or ""))
++    return int(m.group(0)) if m else 0
++
+ def run():
+     import xbmc, xbmcaddon, xbmcgui, xbmcvfs
+     from .kodi_sensor import KodiTelemetryReader
+@@ -21,7 +25,7 @@
+ 
+     addon=xbmcaddon.Addon(); monitor=xbmc.Monitor()
+     if not addon.getSettingBool("enabled"): return
+-    major=int((xbmc.getInfoLabel("System.BuildVersion") or "0").split(".")[0] or 0)
++    major=kodi_major_version(xbmc.getInfoLabel("System.BuildVersion"))
+     if major and major < 22:
+         xbmcgui.Dialog().notification("Stream Doctor", "Kodi 22 Piers is required for full telemetry.", xbmcgui.NOTIFICATION_WARNING, 6000)
+     player=xbmc.Player(); sensor=KodiTelemetryReader(xbmc, player)
+@@ -55,7 +59,7 @@
+         try: playing=player.isPlayingVideo()
+         except Exception: playing=False
+         if playing:
+-            s=sensor.sample(time.monotonic())
++            s=sensor.sample(time.monotonic(), playing=True)
+             streamlike=s.is_live or s.is_internet_stream or s.is_livetv_content
+             if not streamlike:
+                 session=finish(session); active_source_key=""
+diff -ruN '--exclude=dist' /mnt/data/kodi-stream-doctor/v011-extract/kodi-stream-doctor/service.streamdoctor/resources/lib/streamdoctor/session.py /mnt/data/kodi-stream-doctor/v012-extract/kodi-stream-doctor/service.streamdoctor/resources/lib/streamdoctor/session.py
+--- /mnt/data/kodi-stream-doctor/v011-extract/kodi-stream-doctor/service.streamdoctor/resources/lib/streamdoctor/session.py	2026-01-01 00:00:00.000000000 +0000
++++ /mnt/data/kodi-stream-doctor/v012-extract/kodi-stream-doctor/service.streamdoctor/resources/lib/streamdoctor/session.py	2026-01-01 00:00:00.000000000 +0000
+@@ -62,7 +62,10 @@
+             return max(set(vals),key=vals.count) if vals else ""
+         def bool_mode(attr):
+             vals=[getattr(x,attr) for x in data if getattr(x,attr) is not None]
+-            return (sum(1 for v in vals if v) >= len(vals)/2) if vals else None
++            if not vals: return None
++            yes=sum(1 for v in vals if v)
++            if yes * 2 == len(vals): return None
++            return yes * 2 > len(vals)
+         return {
+             "pvr_provider":mode("pvr_provider"), "source_origin":mode("source_origin"), "channel_name":mode("channel_name"), "stream_title":mode("stream_title"), "video_codec":mode("video_codec"), "video_decoder":mode("video_decoder"),
+             "audio_decoder":mode("audio_decoder"), "scan_type":mode("scan_type"), "deinterlace_method":mode("deint_method"), "hardware_decoder_active":bool_mode("hw_decoder"), "internet_connected":bool_mode("internet_connected"),
+diff -ruN '--exclude=dist' /mnt/data/kodi-stream-doctor/v011-extract/kodi-stream-doctor/service.streamdoctor/resources/lib/streamdoctor/storage.py /mnt/data/kodi-stream-doctor/v012-extract/kodi-stream-doctor/service.streamdoctor/resources/lib/streamdoctor/storage.py
+--- /mnt/data/kodi-stream-doctor/v011-extract/kodi-stream-doctor/service.streamdoctor/resources/lib/streamdoctor/storage.py	2026-01-01 00:00:00.000000000 +0000
++++ /mnt/data/kodi-stream-doctor/v012-extract/kodi-stream-doctor/service.streamdoctor/resources/lib/streamdoctor/storage.py	2026-01-01 00:00:00.000000000 +0000
+@@ -1,12 +1,38 @@
+-import json, os, time
++import json, os, re, time
+ from typing import Dict, List
++from .redaction import redact_text, safe_source_label
+ 
+ MAX_FILES_HARD = 20
+ MAX_TOTAL_BYTES = 20 * 1024 * 1024
+ MAX_FILE_BYTES = 4 * 1024 * 1024
+ 
+ 
++_SECRET_FIELD = re.compile(r"(?i)^(?:token|auth|authorization|cookie|api[_-]?key|signature|sig|jwt|session|password|passwd|credential)$")
++
++def _sanitize_for_storage(obj, key=""):
++    if isinstance(obj, dict):
++        out={}
++        for k,v in obj.items():
++            sk=str(k)
++            if sk == "source_key":
++                continue
++            if _SECRET_FIELD.match(sk):
++                out[k]="[REDACTED]"
++            else:
++                out[k]=_sanitize_for_storage(v,sk)
++        return out
++    if isinstance(obj, list):
++        return [_sanitize_for_storage(v,key) for v in obj]
++    if isinstance(obj, tuple):
++        return [_sanitize_for_storage(v,key) for v in obj]
++    if isinstance(obj, str):
++        if key == "source_origin":
++            return safe_source_label(obj)
++        return redact_text(obj)
++    return obj
++
+ def _safe_json_bytes(obj: Dict) -> bytes:
++    obj=_sanitize_for_storage(obj)
+     raw = json.dumps(obj, ensure_ascii=False, indent=2, sort_keys=True).encode("utf-8")
+     if len(raw) > MAX_FILE_BYTES:
+         # Reports deliberately omit raw sample dumps; this should almost never trigger.
+@@ -70,9 +96,19 @@
+     files=[os.path.join(directory,n) for n in os.listdir(directory) if n.startswith("streamdoctor-") and n.endswith(".json")]
+     files.sort(key=lambda p:os.path.getmtime(p), reverse=True)
+     out=[]
+-    for p in files[:max(0,min(MAX_FILES_HARD,int(limit)))]:
++    wanted=max(0,min(MAX_FILES_HARD,int(limit)))
++    for p in files:
++        if len(out) >= wanted:
++            break
+         try:
+-            with open(p,encoding="utf-8") as f: out.append(json.load(f))
++            # Never ingest an unexpectedly large/corrupt report file placed in the
++            # profile directory by another process. Stream Doctor's own reports are capped.
++            if os.path.getsize(p) > MAX_FILE_BYTES:
++                continue
++            with open(p,encoding="utf-8") as f:
++                report=json.load(f)
++            if isinstance(report,dict):
++                out.append(report)
+         except Exception:
+             continue
+     return out
+diff -ruN '--exclude=dist' /mnt/data/kodi-stream-doctor/v011-extract/kodi-stream-doctor/service.streamdoctor/resources/lib/streamdoctor/ui.py /mnt/data/kodi-stream-doctor/v012-extract/kodi-stream-doctor/service.streamdoctor/resources/lib/streamdoctor/ui.py
+--- /mnt/data/kodi-stream-doctor/v011-extract/kodi-stream-doctor/service.streamdoctor/resources/lib/streamdoctor/ui.py	2026-01-01 00:00:00.000000000 +0000
++++ /mnt/data/kodi-stream-doctor/v012-extract/kodi-stream-doctor/service.streamdoctor/resources/lib/streamdoctor/ui.py	2026-01-01 00:00:00.000000000 +0000
+@@ -1,4 +1,5 @@
+ import json, os
++from .storage import MAX_FILE_BYTES
+ 
+ def _present(value):
+     if isinstance(value,bool): return True
+@@ -86,10 +87,18 @@
+     if not os.path.isdir(base): return None
+     files=[os.path.join(base,n) for n in os.listdir(base) if n.startswith('streamdoctor-') and n.endswith('.json')]
+     if not files: return None
+-    p=max(files,key=os.path.getmtime)
+-    try:
+-        with open(p,encoding='utf-8') as f: return json.load(f)
+-    except Exception: return None
++    files.sort(key=os.path.getmtime, reverse=True)
++    for p in files:
++        try:
++            if os.path.getsize(p) > MAX_FILE_BYTES:
++                continue
++            with open(p,encoding='utf-8') as f:
++                report=json.load(f)
++            if isinstance(report,dict):
++                return report

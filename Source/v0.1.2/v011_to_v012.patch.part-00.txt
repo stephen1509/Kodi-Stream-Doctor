@@ -1,0 +1,118 @@
+diff -ruN '--exclude=dist' /mnt/data/kodi-stream-doctor/v011-extract/kodi-stream-doctor/.gitignore /mnt/data/kodi-stream-doctor/v012-extract/kodi-stream-doctor/.gitignore
+--- /mnt/data/kodi-stream-doctor/v011-extract/kodi-stream-doctor/.gitignore	1970-01-01 00:00:00.000000000 +0000
++++ /mnt/data/kodi-stream-doctor/v012-extract/kodi-stream-doctor/.gitignore	2026-01-01 00:00:00.000000000 +0000
+@@ -0,0 +1,8 @@
++__pycache__/
++*.py[cod]
++.pytest_cache/
++.coverage
++htmlcov/
++dist/
++*.log
++.DS_Store
+diff -ruN '--exclude=dist' /mnt/data/kodi-stream-doctor/v011-extract/kodi-stream-doctor/PRESERVATION.md /mnt/data/kodi-stream-doctor/v012-extract/kodi-stream-doctor/PRESERVATION.md
+--- /mnt/data/kodi-stream-doctor/v011-extract/kodi-stream-doctor/PRESERVATION.md	1970-01-01 00:00:00.000000000 +0000
++++ /mnt/data/kodi-stream-doctor/v012-extract/kodi-stream-doctor/PRESERVATION.md	2026-01-01 00:00:00.000000000 +0000
+@@ -0,0 +1,24 @@
++# Preservation Checkpoint — Kodi Stream Doctor v0.1.2
++
++Date: 2026-08-17 JST
++Target: Kodi 22 Piers, Windows first
++Safety mode: read-only
++
++## Verified state
++
++- Maintained automated suite: 111 passing tests.
++- Five repeated full-suite runs: 111/111 each.
++- Approximate production-code statement coverage: 90.95%.
++- Deterministic diagnosis engine: 100% statement coverage.
++- Additional adversarial stress: 20,000 randomized telemetry windows passed.
++- Full compile/XML/static-safety/package/CRC/checksum QA: PASS.
++- Physical Kodi 22 validation: NOT YET COMPLETED.
++- Automatic optimization/settings mutation: NOT ENABLED.
++
++## Canonical release artifacts
++
++Artifacts are generated with `tools/build_zip.py` and verified by `tools/qa.py`. Exact v0.1.2 checksums are recorded after the final build.
++
++## Preservation rule
++
++The source tree is canonical for development. Release ZIPs must be regenerated and re-checked after source changes. Do not treat the physical-validation candidate as a finished Kodi release until the gates in `docs/PHYSICAL_VALIDATION.md` pass.
+diff -ruN '--exclude=dist' /mnt/data/kodi-stream-doctor/v011-extract/kodi-stream-doctor/README.md /mnt/data/kodi-stream-doctor/v012-extract/kodi-stream-doctor/README.md
+--- /mnt/data/kodi-stream-doctor/v011-extract/kodi-stream-doctor/README.md	2026-01-01 00:00:00.000000000 +0000
++++ /mnt/data/kodi-stream-doctor/v012-extract/kodi-stream-doctor/README.md	2026-01-01 00:00:00.000000000 +0000
+@@ -32,7 +32,7 @@
+ ## Install for physical validation
+ 
+ 1. On Windows, use a **separate Kodi 22 portable installation** for the first validation round. Install Piers into a writable non-Program-Files folder and launch its shortcut with `-p`; confirm that its own `portable_data` folder is created. Do not install Piers over the everyday Kodi profile.
+-2. In that portable Kodi 22 instance: Kodi → Add-ons → Install from zip file → choose `service.streamdoctor-0.1.1.zip`.
++2. In that portable Kodi 22 instance: Kodi → Add-ons → Install from zip file → choose `service.streamdoctor-0.1.2.zip`.
+ 3. In Stream Doctor settings, optionally enter your Internet plan in **Mbps** (1000 = 1 Gbps, 2000 = 2 Gbps, 10000 = 10 Gbps).
+ 4. Play representative good and bad live streams.
+ 5. Reports are written under Kodi's profile path: `addon_data/service.streamdoctor/reports`.
+diff -ruN '--exclude=dist' /mnt/data/kodi-stream-doctor/v011-extract/kodi-stream-doctor/docs/AUDIT_2026-08-17_V012.md /mnt/data/kodi-stream-doctor/v012-extract/kodi-stream-doctor/docs/AUDIT_2026-08-17_V012.md
+--- /mnt/data/kodi-stream-doctor/v011-extract/kodi-stream-doctor/docs/AUDIT_2026-08-17_V012.md	1970-01-01 00:00:00.000000000 +0000
++++ /mnt/data/kodi-stream-doctor/v012-extract/kodi-stream-doctor/docs/AUDIT_2026-08-17_V012.md	2026-01-01 00:00:00.000000000 +0000
+@@ -0,0 +1,44 @@
++# Stream Doctor v0.1.2 — Re-audit Record
++
++Date: 2026-08-17 JST
++Target: Kodi 22 "Piers", Windows first
++Safety mode: read-only
++
++## Purpose
++
++Fresh re-audit of the v0.1.1 physical-validation candidate. The pass deliberately looked beyond the existing test suite for contradictory telemetry, false-positive diagnosis paths, privacy boundary failures, report corruption handling, source/session boundary errors, and package-version inconsistencies.
++
++## Problems found and fixed
++
++1. Internal library version was stale at 0.1.0 while addon.xml was 0.1.1. v0.1.2 now has a QA-enforced version consistency check.
++2. Runtime confirmed video playback and the sensor immediately queried `isPlayingVideo()` a second time. A transient exception could create a contradictory non-playing sample. Runtime now passes the already-known playback state into the sensor.
++3. Boolean telemetry exceptions could collapse "unknown" into `False`, particularly hardware-decoder state. Optional boolean reads are now tri-state.
++4. One transient queue/bitrate dip could be retained as a high-confidence starvation event. Delivery and audio starvation now require sustained consecutive evidence unless a fresh user problem marker corroborates the event.
++5. Low free-memory percentage alone could mark a smooth stream degraded. Memory diagnosis now uses absolute free MB when available, and uncorroborated low memory is a low-severity headroom risk rather than a causal playback claim.
++6. A 50/50 boolean summary was silently resolved to `True`. Ties now remain unknown.
++7. Two isolated Kodi Internet-state blips could support a high outage diagnosis. Outage attribution now requires sustained overlap with starvation (or a fresh user marker).
++8. Stream identity depended too heavily on Player.Folderpath. Channel/provider metadata now provides a privacy-preserving fallback when the path is missing, improving PVR channel-change session separation.
++9. Malformed URL ports could send identity normalization down a less safe fallback. Malformed credential-bearing URLs are now normalized without retaining raw credentials/query/fragment in identity material.
++10. Generic `pvr://` origin labels were too coarse for historical source attribution when provider metadata was absent. History now refuses that unsupported attribution.
++11. Report loading could let a corrupt/oversized newest file hide older valid reports. Storage and UI now skip invalid/oversized files and continue to the latest valid report.
++12. Storage privacy depended mainly on upstream field sanitization. The report writer now independently redacts secret-like values, strips ephemeral source keys, and re-sanitizes source origins as defense in depth.
++13. QA did not CRC-test every ZIP member or enforce internal/package version agreement. Both gates are now mandatory.
++
++## Validation after fixes
++
++- Maintained automated suite: 111/111 passing.
++- Five consecutive complete pytest runs: 111/111 each.
++- unittest/QA discovery: 111/111 passing.
++- Deterministic diagnosis engine: 100% statement coverage.
++- Approximate production-code statement coverage: 90.95%.
++- Additional randomized adversarial stress: 20,000 telemetry windows, no crashes, bounded confidence/scores/status values.
++- Install ZIP deterministic rebuild: byte-identical.
++- Source ZIP deterministic rebuild: byte-identical when source tree is unchanged.
++- Python compile: PASS.
++- XML parse: PASS.
++- Static read-only / no outbound HTTP/OpenAI-client gate: PASS.
++- ZIP CRC/integrity and required-file structure: PASS.
++
++## Remaining gate
++
++This is still a physical-validation candidate, not a finished release. Real Kodi 22 testing remains required for actual InfoLabel behavior across representative PVR/HLS/DASH streams, runtime overhead, device-specific decoder behavior, and diagnosis accuracy against real visible faults.
+diff -ruN '--exclude=dist' /mnt/data/kodi-stream-doctor/v011-extract/kodi-stream-doctor/docs/BUILD_STATUS.md /mnt/data/kodi-stream-doctor/v012-extract/kodi-stream-doctor/docs/BUILD_STATUS.md
+--- /mnt/data/kodi-stream-doctor/v011-extract/kodi-stream-doctor/docs/BUILD_STATUS.md	2026-01-01 00:00:00.000000000 +0000
++++ /mnt/data/kodi-stream-doctor/v012-extract/kodi-stream-doctor/docs/BUILD_STATUS.md	2026-01-01 00:00:00.000000000 +0000
+@@ -1,4 +1,4 @@
+-# Build Status — v0.1.0 Physical-Validation Candidate
++# Build Status — v0.1.2 Physical-Validation Candidate
+ 
+ Date: 2026-08-17 JST
+ Target: Kodi 22 "Piers", Windows first
+@@ -20,9 +20,9 @@
+ 
+ ## Automated validation
+ 
+-Current maintained suite: **94 passing tests**.
++Current maintained suite: **111 passing tests** (the exact count is reported by `tools/qa.py`).
+ 
+-Measured Python test coverage after the latest audit is approximately **85% overall**, with the deterministic diagnosis engine at **100% statement coverage** in the maintained suite. UI/platform branches that require real Kodi/Windows remain lower and are explicitly covered by physical gates.
++Measured Python test coverage after the latest audit is approximately **91% production-code statement coverage**, with the deterministic diagnosis engine at **100% statement coverage** in the maintained suite. UI/platform branches that requir

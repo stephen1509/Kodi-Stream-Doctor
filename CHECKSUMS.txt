@@ -1,0 +1,13 @@
+Kodi Stream Doctor v0.1.1 — 2026-08-17 JST
+
+Decoded install ZIP:
+adf02dcc6a827c98bea574e3a7807b89c2282963fe740f3416e00dceb303ddf4  service.streamdoctor-0.1.1.zip
+
+Decoded source ZIP:
+a79394af0a9ac52fef0320f13ee36f67d4055a515d256b25eb8a9f2fd39c6cb2  kodi-stream-doctor-source-0.1.1.zip
+
+Decoded Git bundle:
+14977c6abd0439f61b11ded9c767bde104b9bd38647f50795697bf6eb967e768  kodi-stream-doctor-v0.1.1.git.bundle
+
+Canonical Git commit:
+c59f64480e5748803b1d7ad0cec9d76eafe8e1d3  main

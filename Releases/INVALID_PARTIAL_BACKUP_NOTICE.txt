@@ -1,0 +1,16 @@
+IMPORTANT — DO NOT USE THE ABANDONED PARTIAL RELEASE BACKUP
+
+The file:
+service.streamdoctor-0.1.1.zip.b64.part-01.txt
+
+is an abandoned first attempt to preserve the install ZIP through the text-only Dropbox connector. Dropbox reported it as 15,999 bytes when 16,000 were expected, so it is explicitly INVALID / INCOMPLETE and must NOT be used to reconstruct the release ZIP.
+
+It has been left in place rather than deleted because deletion was not requested and preserving audit history is safer than silently removing it.
+
+The canonical v0.1.1 project source, tests, tools and documentation are preserved under ../Source as a verified-size 10-part Base64 representation of:
+kodi-stream-doctor-v0.1.1-preservation.tar.xz
+
+See ../Source/MANIFEST.txt for reconstruction and SHA-256 verification instructions.
+
+The install ZIP is reproducible from the preserved source. Expected tested v0.1.1 install ZIP SHA-256:
+adf02dcc6a827c98bea574e3a7807b89c2282963fe740f3416e00dceb303ddf4
