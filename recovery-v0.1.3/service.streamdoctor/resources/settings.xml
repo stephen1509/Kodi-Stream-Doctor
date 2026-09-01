@@ -1,0 +1,46 @@
+<?xml version="1.0" ?>
+<settings version="1">
+  <section id="service.streamdoctor">
+    <category id="general" label="32000" help="">
+      <group id="1">
+        <setting id="enabled" label="32001" type="boolean" help="32011">
+          <level>0</level><default>true</default><control type="toggle"/>
+        </setting>
+        <setting id="notifications" label="32002" type="boolean" help="32012">
+          <level>0</level><default>true</default><control type="toggle"/>
+        </setting>
+        <setting id="sample_interval_ms" label="32003" type="integer" help="32013">
+          <level>1</level><default>500</default>
+          <constraints><minimum>250</minimum><maximum>2000</maximum></constraints>
+          <control type="edit" format="integer"/>
+        </setting>
+      </group>
+    </category>
+    <category id="network" label="32004" help="">
+      <group id="2">
+        <setting id="internet_plan_mbps" label="32005" type="integer" help="32015">
+          <level>0</level><default>0</default>
+          <constraints><minimum>0</minimum><maximum>100000</maximum></constraints>
+          <control type="edit" format="integer"/>
+        </setting>
+        <setting id="known_capacity_mbps" label="32006" type="integer" help="32016">
+          <level>1</level><default>0</default>
+          <constraints><minimum>0</minimum><maximum>100000</maximum></constraints>
+          <control type="edit" format="integer"/>
+        </setting>
+      </group>
+    </category>
+    <category id="privacy" label="32007" help="">
+      <group id="3">
+        <setting id="store_reports" label="32008" type="boolean" help="32018">
+          <level>0</level><default>true</default><control type="toggle"/>
+        </setting>
+        <setting id="retention_files" label="32009" type="integer" help="32019">
+          <level>1</level><default>20</default>
+          <constraints><minimum>1</minimum><maximum>20</maximum></constraints>
+          <control type="edit" format="integer"/>
+        </setting>
+      </group>
+    </category>
+  </section>
+</settings>
